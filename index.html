@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบบัญชีเครดิต</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --primary: #1a1a2e;
+            --primary-light: #16213e;
+            --bg-color: #f7f8fc;
+            --card-bg: #ffffff;
+            --text-color: #1a1a2e;
+            --text-muted: #64748b;
+            --border-color: #e5e7eb;
+            --success: #10b981;
+        }
+
+        * {
+            box-sizing: border-box;
+            font-family: 'Sarabun', 'Noto Sans Thai', sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            min-height: 100vh;
+            padding-bottom: 40px;
+        }
+
+        /* --- Header & Navigation --- */
+        .header {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+            padding: 20px 20px 0;
+            color: #fff;
+        }
+
+        .header-title {
+            font-size: 20px;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+        }
+
+        .header-subtitle {
+            font-size: 12px;
+            color: #94a3b8;
+            margin-top: 20px; /* ขยับเพื่อให้สอดคล้องกับโค้ดเดิมที่ถูกตัด */
+        }
+
+        .nav-tabs {
+            display: flex;
+            margin-top: 15px;
+            gap: 10px;
+            overflow-x: auto;
+        }
+
+        .tab-btn {
+            background: none;
+            border: none;
+            color: #94a3b8;
+            padding: 10px 16px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            white-space: nowrap;
+            transition: all 0.2s;
+        }
+
+        .tab-btn.active {
+            color: #fff;
+            border-bottom-color: #3b82f6;
+        }
+
+        /* --- Layout Container --- */
+        .container {
+            padding: 16px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* --- UI Components --- */
+        .card {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            margin-bottom: 16px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        @media (min-width: 768px) {
+            .stats-grid {
+                grid-template-columns: repeat(4, 1fr);
+            }
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+            font-weight: 600;
+        }
+
+        .stat-val {
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: opacity 0.2s;
+        }
+
+        .btn:hover {
+            opacity: 0.9;
+        }
+
+        .btn-primary { background: #3b82f6; color: white; }
+        .btn-success { background: #10b981; color: white; }
+        .btn-danger { background: #ef4444; color: white; }
+        .btn-secondary { background: #e5e7eb; color: #374151; }
+
+        .flex-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        /* --- Tables --- */
+        .table-responsive {
+            overflow-x: auto;
+            margin-top: 10px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 14px;
+        }
+
+        th {
+            background: #f8fafc;
+            color: var(--text-muted);
+            padding: 10px 12px;
+            font-weight: 600;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        td {
+            padding: 12px;
+            border-bottom: 1px solid var(--border-color);
+            vertical-align: middle;
+        }
+
+        /* --- Modals --- */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .modal-container {
+            background: #fff;
+            border-radius: 16px;
+            width: 100%;
+            max-width: 480px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 8px 40px rgba(0,0,0,0.25);
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 18px 20px 12px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .modal-title {
+            font-weight: 700;
+            font-size: 16px;
+            color: var(--primary);
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            color: #888;
+        }
+
+        .modal-body {
+            padding: 16px 20px 20px;
+        }
+
+        /* --- Forms --- */
+        .input-row {
+            margin-bottom: 12px;
+        }
+
+        .input-row label {
+            display: block;
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 4px;
+            font-weight: 600;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1.5px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 14px;
+            box-sizing: border-box;
+            outline: none;
+        }
+
+        .form-control:focus {
+            border-color: #3b82f6;
+        }
+
+        /* --- Tags --- */
+        .tag {
+            border-radius: 6px;
+            padding: 2px 8px;
+            font-size: 11px;
+            font-weight: 600;
+            white-space: nowrap;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="loading" style="display: flex; align-items: center; justify-content: center; min-height: 100vh; color: #888; font-size: 16px;">
+        กำลังโหลดข้อมูล...
+    </div>
+
+    <div id="app" style="display: none;">
+        <div class="header">
+            <div class="header-title">💰 ระบบบัญชีเครดิต</div>
+            <div class="header-subtitle">แยกทุน – กำไร ชัดเจน</div>
+            
+            <div class="nav-tabs" id="navTabs">
+                </div>
+        </div>
+
+        <div class="container">
+            <div id="tab-dashboard" class="tab-content">
+                <div class="stats-grid">
+                    <div class="card">
+                        <div class="stat-label">💵 ทุนปล่อยทั้งหมด</div>
+                        <div class="stat-val" id="dash-totalCapitalOut" style="color: #3b82f6;">฿0</div>
+                    </div>
+                    <div class="card">
+                        <div class="stat-label">📥 ได้รับทุนคืนแล้ว</div>
+                        <div class="stat-val" id="dash-totalCapitalReturned" style="color: #10b981;">฿0</div>
+                    </div>
+                    <div class="card">
+                        <div class="stat-label">📈 กำไรที่เก็บได้</div>
+                        <div class="stat-val" id="dash-totalProfit" style="color: #8b5cf6;">฿0</div>
+                    </div>
+                    <div class="card">
+                        <div class="stat-label">⏳ ยอดค้างทั้งหมด</div>
+                        <div class="stat-val" id="dash-totalOutstanding" style="color: #ef4444;">฿0</div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h3 style="margin-bottom: 12px; font-size: 16px;">💡 ข้อมูลภาพรวม</h3>
+                    <p style="font-size: 14px; color: var(--text-muted); line-height: 1.6;">
+                        ยินดีต้อนรับสู่ระบบบัญชีเครดิต ระบบนี้ช่วยจัดการข้อมูลลูกหนี้ แยกสัดส่วนเงินทุนและกำไรจากการรับชำระเงินโดยอัตโนมัติ 
+                        กรุณาเลือกเมนูด้านบนเพื่อเริ่มต้นจัดการข้อมูลลูกค้าและยอดหนี้
+                    </p>
+                </div>
+            </div>
+
+            <div id="tab-monthly" class="tab-content">
+                <div class="card">
+                    <h3 style="margin-bottom: 12px; font-size: 16px;">📅 รายงานสรุปรายเดือน</h3>
+                    <div class="table-responsive">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>เดือน</th>
+                                    <th>ยอดเก็บได้รวม</th>
+                                    <th>ส่วนของทุน</th>
+                                    <th>ส่วนของกำไร</th>
+                                </tr>
+                            </thead>
+                            <tbody id="monthly-table-body">
+                                </tbody>
+                        </table>
+                    </div>
