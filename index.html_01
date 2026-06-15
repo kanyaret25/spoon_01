@@ -1,0 +1,244 @@
+import { useState, useMemo, useEffect } from "react";
+
+// ---- CONSTANTS ----
+const CREDIT_TYPES = [
+  { value: "bad_debt", label: "เครดิตเสีย", color: "#ef4444" },
+  { value: "loan", label: "เครดิตเงินกู้", color: "#f97316" },
+  { value: "scan_outside", label: "สแกนของนอกร้าน", color: "#8b5cf6" },
+  { value: "in_store", label: "ซื้อของร้าน (ราคาเครดิต)", color: "#3b82f6" },
+];
+
+const MONTHS_TH = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+
+function genId() {
+  return Math.random().toString(36).slice(2, 9);
+}
+
+// ---- UTILITY ----
+function calcDebtSplit(debt) {
+  const profitRatio = (debt.creditPrice - debt.principal) / debt.creditPrice;
+  return { profitRatio, capitalRatio: 1 - profitRatio };
+}
+
+function getMonthKey(dateStr) {
+  const d = new Date(dateStr);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthLabel(key) {
+  const [y, m] = key.split("-");
+  return `${MONTHS_TH[parseInt(m) - 1]} ${parseInt(y) + 543}`;
+}
+
+// ---- STORAGE HELPERS ----
+// ลองใช้ window.storage (Claude artifact) ก่อน ถ้าไม่มีให้ fallback เป็น localStorage
+async function saveData(key, value) {
+  const json = JSON.stringify(value);
+  try {
+    if (window.storage) {
+      await window.storage.set(key, json);
+    } else {
+      localStorage.setItem("credit_" + key, json);
+    }
+  } catch (e) {
+    try { localStorage.setItem("credit_" + key, json); } catch (_) {}
+  }
+}
+
+async function loadData(key, fallback) {
+  try {
+    if (window.storage) {
+      const result = await window.storage.get(key);
+      if (result) return JSON.parse(result.value);
+    }
+  } catch (_) {}
+  try {
+    const raw = localStorage.getItem("credit_" + key);
+    if (raw) return JSON.parse(raw);
+  } catch (_) {}
+  return fallback;
+}
+
+// ---- COMPONENTS ----
+function Tag({ type }) {
+  const t = CREDIT_TYPES.find((x) => x.value === type);
+  return (
+    <span style={{ background: t?.color + "22", color: t?.color, border: `1px solid ${t?.color}44`, borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 600, whiteSpace: "nowrap" }}>
+      {t?.label || type}
+    </span>
+  );
+}
+
+function Modal({ title, onClose, children }) {
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "#0009", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div style={{ background: "#fff", borderRadius: 16, width: "100%", maxWidth: 480, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 8px 40px #0004" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 20px 12px", borderBottom: "1px solid #f0f0f0" }}>
+          <span style={{ fontWeight: 700, fontSize: 16, color: "#1a1a2e" }}>{title}</span>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#888" }}>✕</button>
+        </div>
+        <div style={{ padding: "16px 20px 20px" }}>{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function InputRow({ label, children }) {
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <label style={{ display: "block", fontSize: 12, color: "#666", marginBottom: 4, fontWeight: 600 }}>{label}</label>
+      {children}
+    </div>
+  );
+}
+
+const inputStyle = { width: "100%", padding: "8px 10px", border: "1.5px solid #e5e7eb", borderRadius: 8, fontSize: 14, boxSizing: "border-box", outline: "none" };
+
+// ============================
+// MAIN APP
+// ============================
+export default function App() {
+  const [ready, setReady] = useState(false);
+  const [tab, setTab] = useState("dashboard");
+  const [customers, setCustomers] = useState([]);
+  const [debts, setDebts] = useState([]);
+  const [payments, setPayments] = useState([]);
+
+  // Modals
+  const [showAddCustomer, setShowAddCustomer] = useState(false);
+  const [showAddDebt, setShowAddDebt] = useState(false);
+  const [showAddPayment, setShowAddPayment] = useState(null);
+  const [selectedDebt, setSelectedDebt] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
+
+  // Forms
+  const [custForm, setCustForm] = useState({ name: "", phone: "" });
+  const [debtForm, setDebtForm] = useState({ customerId: "", creditType: "bad_debt", principal: "", creditPrice: "", totalInstallments: "", startDate: "", note: "" });
+  const [payForm, setPayForm] = useState({ date: new Date().toISOString().slice(0, 10), amount: "", note: "" });
+
+  // ---- Load from storage on mount ----
+  useEffect(() => {
+    async function load() {
+      const c = await loadData("customers", []);
+      const d = await loadData("debts", []);
+      const p = await loadData("payments", []);
+      setCustomers(c);
+      setDebts(d);
+      setPayments(p);
+      setReady(true);
+    }
+    load();
+  }, []);
+
+  // ---- Auto-save whenever data changes (after ready) ----
+  useEffect(() => { if (ready) saveData("customers", customers); }, [customers, ready]);
+  useEffect(() => { if (ready) saveData("debts", debts); }, [debts, ready]);
+  useEffect(() => { if (ready) saveData("payments", payments); }, [payments, ready]);
+
+  // ---- Derived ----
+  const debtMap = useMemo(() => Object.fromEntries(debts.map((d) => [d.id, d])), [debts]);
+  const customerMap = useMemo(() => Object.fromEntries(customers.map((c) => [c.id, c])), [customers]);
+
+  const debtStats = useMemo(() => {
+    const stats = {};
+    debts.forEach((d) => {
+      const { profitRatio, capitalRatio } = calcDebtSplit(d);
+      const ps = payments.filter((p) => p.debtId === d.id);
+      const totalPaid = ps.reduce((s, p) => s + p.amount, 0);
+      const capitalReturned = totalPaid * capitalRatio;
+      const profitCollected = totalPaid * profitRatio;
+      const remaining = d.creditPrice - totalPaid;
+      stats[d.id] = { totalPaid, capitalReturned, profitCollected, remaining, profitRatio, capitalRatio, installmentAmt: d.creditPrice / d.totalInstallments };
+    });
+    return stats;
+  }, [debts, payments]);
+
+  const monthlySummary = useMemo(() => {
+    const map = {};
+    payments.forEach((p) => {
+      const d = debtMap[p.debtId];
+      if (!d) return;
+      const { profitRatio, capitalRatio } = calcDebtSplit(d);
+      const mk = getMonthKey(p.date);
+      if (!map[mk]) map[mk] = { income: 0, capital: 0, profit: 0, payments: [] };
+      map[mk].income += p.amount;
+      map[mk].capital += p.amount * capitalRatio;
+      map[mk].profit += p.amount * profitRatio;
+      map[mk].payments.push(p);
+    });
+    return Object.entries(map).sort((a, b) => a[0].localeCompare(b[0])).map(([k, v]) => ({ key: k, label: monthLabel(k), ...v }));
+  }, [payments, debtMap]);
+
+  const totalCapitalOut = useMemo(() => debts.reduce((s, d) => s + d.principal, 0), [debts]);
+  const totalCapitalReturned = useMemo(() => Object.values(debtStats).reduce((s, v) => s + v.capitalReturned, 0), [debtStats]);
+  const totalProfit = useMemo(() => Object.values(debtStats).reduce((s, v) => s + v.profitCollected, 0), [debtStats]);
+  const totalOutstanding = useMemo(() => Object.values(debtStats).reduce((s, v) => s + Math.max(0, v.remaining), 0), [debtStats]);
+
+  // ---- Handlers ----
+  function addCustomer() {
+    if (!custForm.name.trim()) return;
+    setCustomers((prev) => [...prev, { id: genId(), ...custForm }]);
+    setCustForm({ name: "", phone: "" });
+    setShowAddCustomer(false);
+  }
+
+  function addDebt() {
+    const missing = [];
+    if (!debtForm.customerId) missing.push("ลูกค้า");
+    if (!debtForm.principal || +debtForm.principal <= 0) missing.push("ยอดทุน");
+    if (!debtForm.creditPrice || +debtForm.creditPrice <= 0) missing.push("ยอดเครดิต");
+    if (!debtForm.totalInstallments || +debtForm.totalInstallments <= 0) missing.push("จำนวนงวด");
+    if (missing.length > 0) {
+      alert("กรุณากรอก: " + missing.join(", "));
+      return;
+    }
+    setDebts((prev) => [...prev, {
+      id: genId(),
+      customerId: debtForm.customerId,
+      creditType: debtForm.creditType,
+      principal: +debtForm.principal,
+      creditPrice: +debtForm.creditPrice,
+      totalInstallments: +debtForm.totalInstallments,
+      startDate: debtForm.startDate || new Date().toISOString().slice(0, 10),
+      note: debtForm.note,
+    }]);
+    setDebtForm({ customerId: "", creditType: "bad_debt", principal: "", creditPrice: "", totalInstallments: "", startDate: "", note: "" });
+    setShowAddDebt(false);
+  }
+
+  function addPayment() {
+    if (!payForm.date || !payForm.amount) return;
+    setPayments((prev) => [...prev, { id: genId(), debtId: showAddPayment, ...payForm, amount: +payForm.amount }]);
+    setPayForm({ date: new Date().toISOString().slice(0, 10), amount: "", note: "" });
+    setShowAddPayment(null);
+  }
+
+  function deleteCustomer(customerId) {
+    const debtIds = debts.filter((d) => d.customerId === customerId).map((d) => d.id);
+    setPayments((prev) => prev.filter((p) => !debtIds.includes(p.debtId)));
+    setDebts((prev) => prev.filter((d) => d.customerId !== customerId));
+    setCustomers((prev) => prev.filter((c) => c.id !== customerId));
+    setConfirmDelete(null);
+  }
+
+  const tabs = [
+    { key: "dashboard", label: "📊 ภาพรวม" },
+    { key: "monthly", label: "📅 รายเดือน" },
+    { key: "debts", label: "📋 ลูกหนี้" },
+    { key: "customers", label: "👤 ลูกค้า" },
+  ];
+
+  if (!ready) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", fontFamily: "sans-serif", color: "#888", fontSize: 16 }}>
+        กำลังโหลดข้อมูล...
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ fontFamily: "'Sarabun', 'Noto Sans Thai', sans-serif", background: "#f7f8fc", minHeight: "100vh", color: "#1a1a2e" }}>
+      {/* Header */}
+      <div style={{ background: "linear-gradient(135deg,#1a1a2e 0%,#16213e 100%)", padding: "20px 20px 0", color: "#fff" }}>
+        <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: 0.5 }}>💰 ระบบบัญชีเครดิต</div>
+        <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>แยกทุน–ก
